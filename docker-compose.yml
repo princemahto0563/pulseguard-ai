@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: pulseguard-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  backend:
+    build: ./backend
+    container_name: pulseguard-backend
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - MONGODB_URI=mongodb://mongodb:27017/pulseguard
+      - JWT_SECRET=super-secret-pulseguard-token-key-12345
+      - GEMINI_API_KEY=
+      - MOCK_DB=false
+    depends_on:
+      - mongodb
+
+  frontend:
+    build: ./frontend
+    container_name: pulseguard-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5001/api
+    depends_on:
+      - backend
+
+volumes:
+  mongo-data:
