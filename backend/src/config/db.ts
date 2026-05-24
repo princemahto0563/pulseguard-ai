@@ -14,11 +14,13 @@ export const connectDB = async (): Promise<void> => {
   }
 
   const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/pulseguard';
+  const selectionTimeout = process.env.NODE_ENV === 'production' ? 15000 : 5000;
   
   try {
     mongoose.set('strictQuery', true);
+    console.log(`🔌 Attempting MongoDB connection (timeout: ${selectionTimeout}ms)...`);
     await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 3000 // Quick timeout to fail fast if local mongo isn't up
+      serverSelectionTimeoutMS: selectionTimeout
     });
     isConnected = true;
     console.log('🔌 MongoDB Connected Successfully.');

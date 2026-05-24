@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/store/useStore";
 import { Terminal as TerminalIcon, ShieldAlert, Cpu, Activity, Play, HelpCircle, CornerDownLeft } from "lucide-react";
-import axios from "axios";
+import apiClient from "@/store/apiClient";
 
 interface ITerminalLine {
   type: "input" | "output" | "error" | "success" | "system";
@@ -86,11 +86,8 @@ export default function SRECommandConsole() {
           }
 
           try {
-            const token = localStorage.getItem("pg_token");
-            const res = await axios.post("http://:5001/api/ai/chat", {
+            const res = await apiClient.post("/ai/chat", {
               message: `Why is service ${matchedApi.name} registering healthScore ${matchedApi.healthScore}%? Provide diagnostic review.`
-            }, {
-              headers: { Authorization: `Bearer ${token}` }
             });
             setHistory(prev => [
               ...prev,
@@ -109,14 +106,11 @@ export default function SRECommandConsole() {
             break;
           }
           try {
-            const token = localStorage.getItem("pg_token");
             // Call prediction endpoint or forecast telemetry
-            const response = await axios.post("https://pulseguard-ai-1.onrender.com/api/ai/digital-twin-predict", {
+            const response = await apiClient.post("/ai/digital-twin-predict", {
               trafficMultiplier: 2.5,
               podCount: 2,
               cachePolicy: "disabled"
-            }, {
-              headers: { Authorization: `Bearer ${token}` }
             });
             const data = response.data;
             setHistory(prev => [

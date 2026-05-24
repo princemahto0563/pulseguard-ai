@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import axios from "axios";
+import apiClient from "@/store/apiClient";
 import { Bot, X, Send, Terminal, Sparkles } from "lucide-react";
 
 export default function CopilotDrawer() {
@@ -27,12 +27,7 @@ export default function CopilotDrawer() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("pg_token");
-      const res = await axios.post(
-        "https://pulseguard-ai-1.onrender.com/api/ai/chat",
-        { message: userText },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await apiClient.post("/ai/chat", { message: userText });
       
       setMessages(prev => [...prev, { sender: "ai", text: res.data.reply }]);
     } catch (err) {

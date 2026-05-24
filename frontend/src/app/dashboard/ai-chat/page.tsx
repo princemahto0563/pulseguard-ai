@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import axios from "axios";
+import apiClient from "@/store/apiClient";
 import { Bot, Send, Terminal, Cpu, RefreshCw, Sparkles, ArrowRight } from "lucide-react";
 
 interface IMessage {
@@ -34,12 +34,7 @@ export default function AIDebugAssistant() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("pg_token");
-      const res = await axios.post(
-        "http://localhost:5001/api/ai/chat",
-        { message: userText },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await apiClient.post("/ai/chat", { message: userText });
       
       setMessages(prev => [...prev, { sender: "ai", text: res.data.reply }]);
     } catch (err: any) {

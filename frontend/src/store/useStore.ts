@@ -1,8 +1,6 @@
 import { create } from 'zustand';
-import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
-
-const API_BASE = 'https://pulseguard-ai-1.onrender.com';
+import apiClient from './apiClient';
 
 export interface IUser {
   id: string;
@@ -117,6 +115,7 @@ interface IState {
   predictDigitalTwin: (params: any) => Promise<any>;
   generatePostMortem: (title: string) => Promise<any>;
   
+  // Analytics
   fetchAnalytics: () => Promise<void>;
   fetchReports: () => Promise<void>;
   generateReport: () => Promise<void>;
@@ -125,15 +124,8 @@ interface IState {
   speakText: (text: string) => void;
 }
 
-const setAuthHeader = (token: string | null) => {
-  if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  } else {
-    delete axios.defaults.headers.common['Authorization'];
-  }
-};
-
 let socket: Socket | null = null;
+let isAuthListenerAttached = false;
 
 export const useStore = create<IState>((set, get) => ({
   token: null,
@@ -155,78 +147,104 @@ export const useStore = create<IState>((set, get) => ({
 
   init: () => {
     if (typeof window === 'undefined') return;
+
+    // Attach auth-unauthorized interceptor listener once
+    if (!isAuthListenerAttached) {
+      window.addEventListener('auth-unauthorized', () => {
+        console.warn('⚡ Custom Event: auth-unauthorized caught inside store init. Logging out.');
+        get().logout();
+      });
+      isAuthListenerAttached = true;
+    }
+
     const token = localStorage.getItem('pg_token');
     const userStr = localStorage.getItem('pg_user');
 
     if (token && userStr) {
       const user = JSON.parse(userStr);
-      setAuthHeader(token);
       set({ token, user, isAuthenticated: true });
       
-      socket = io('https://pulseguard-ai-1.onrender.com');
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'https://pulseguard-ai-1.onrender.com';
       
-      socket.on('connect', () => {
-        console.log('🔌 Client WS linked.');
-      });
-
-      socket.on('ping-result', (data: any) => {
-        const currentApis = [...get().apis];
-        const apiIndex = currentApis.findIndex(a => a._id === data.apiId);
+      // Deduplicate WebSocket connections
+      if (!socket) {
+        console.log(`🔌 Initializing client WS connection to: ${wsUrl}`);
+        socket = io(wsUrl, {
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 10,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          timeout: 20000,
+        });
         
-        if (apiIndex !== -1) {
-          currentApis[apiIndex] = {
-            ...currentApis[apiIndex],
-            healthScore: data.healthScore
+        socket.on('connect', () => {
+          console.log('🔌 Client WS linked successfully.');
+        });
+
+        socket.on('connect_error', (err) => {
+          console.error('🔌 Client WS Connection Error:', err.message);
+        });
+        
+        socket.on('ping-result', (data: any) => {
+          const currentApis = [...get().apis];
+          const apiIndex = currentApis.findIndex(a => a._id === data.apiId);
+          
+          if (apiIndex !== -1) {
+            currentApis[apiIndex] = {
+              ...currentApis[apiIndex],
+              healthScore: data.healthScore
+            };
+            set({ apis: currentApis });
+          }
+
+          const apiLogs = get().logs[data.apiId] || [];
+          const newLog: ILog = {
+            _id: Math.random().toString(),
+            apiId: data.apiId,
+            statusCode: data.statusCode,
+            responseTime: data.responseTime,
+            status: data.status,
+            timestamp: data.timestamp
           };
-          set({ apis: currentApis });
-        }
+          
+          const updatedLogs = [newLog, ...apiLogs].slice(0, 50);
+          set({
+            logs: {
+              ...get().logs,
+              [data.apiId]: updatedLogs
+            }
+          });
 
-        const apiLogs = get().logs[data.apiId] || [];
-        const newLog: ILog = {
-          _id: Math.random().toString(),
-          apiId: data.apiId,
-          statusCode: data.statusCode,
-          responseTime: data.responseTime,
-          status: data.status,
-          timestamp: data.timestamp
-        };
-        
-        const updatedLogs = [newLog, ...apiLogs].slice(0, 50);
-        set({
-          logs: {
-            ...get().logs,
-            [data.apiId]: updatedLogs
+          get().fetchAnalytics();
+          
+          // Auto trigger emergency HUD on any new failure overrides!
+          if (data.isChaosOverride && data.status === 'DOWN') {
+            set({ isWarRoomActive: true });
+            get().speakText(`Chaos override injected: ${data.chaosType || "outage"} detected on ${data.name}`);
           }
         });
 
-        get().fetchAnalytics();
-        
-        // Auto trigger emergency HUD on any new failure overrides!
-        if (data.isChaosOverride && data.status === 'DOWN') {
-          set({ isWarRoomActive: true });
-          get().speakText(`Chaos override injected: ${data.chaosType || "outage"} detected on ${data.name}`);
-        }
-      });
+        socket.on('alert-triggered', (data: any) => {
+          const alert: IAlert = {
+            type: data.type,
+            message: data.message,
+            resolved: false,
+            timestamp: data.timestamp
+          };
+          
+          set({ alerts: [alert, ...get().alerts] });
 
-      socket.on('alert-triggered', (data: any) => {
-        const alert: IAlert = {
-          type: data.type,
-          message: data.message,
-          resolved: false,
-          timestamp: data.timestamp
-        };
-        
-        set({ alerts: [alert, ...get().alerts] });
+          if (get().isVoiceAlertEnabled) {
+            get().speakText(data.message);
+          }
+        });
 
-        if (get().isVoiceAlertEnabled) {
-          get().speakText(data.message);
-        }
-      });
-
-      socket.on('incident-updated', (data: any) => {
-        get().fetchIncidents();
-        get().fetchAnalytics();
-      });
+        socket.on('incident-updated', (data: any) => {
+          get().fetchIncidents();
+          get().fetchAnalytics();
+        });
+      }
 
       get().fetchApis();
       get().fetchIncidents();
@@ -237,25 +255,23 @@ export const useStore = create<IState>((set, get) => ({
   },
 
   login: async (credentials) => {
-    const res = await axios.post(`${API_BASE}/auth/login`, credentials);
+    const res = await apiClient.post('/auth/login', credentials);
     const { token, user } = res.data;
     
     localStorage.setItem('pg_token', token);
     localStorage.setItem('pg_user', JSON.stringify(user));
     
-    setAuthHeader(token);
     set({ token, user, isAuthenticated: true });
     get().init();
   },
 
   signup: async (userData) => {
-    const res = await axios.post(`${API_BASE}/auth/signup`, userData);
+    const res = await apiClient.post('/auth/signup', userData);
     const { token, user } = res.data;
     
     localStorage.setItem('pg_token', token);
     localStorage.setItem('pg_user', JSON.stringify(user));
     
-    setAuthHeader(token);
     set({ token, user, isAuthenticated: true });
     get().init();
   },
@@ -263,7 +279,6 @@ export const useStore = create<IState>((set, get) => ({
   logout: () => {
     localStorage.removeItem('pg_token');
     localStorage.removeItem('pg_user');
-    setAuthHeader(null);
     if (socket) {
       socket.disconnect();
       socket = null;
@@ -273,13 +288,13 @@ export const useStore = create<IState>((set, get) => ({
 
   fetchApis: async () => {
     try {
-      const res = await axios.get(`${API_BASE}/apis`);
+      const res = await apiClient.get('/apis');
       set({ apis: res.data });
       
       const logsCache: Record<string, ILog[]> = {};
       for (const api of res.data) {
         try {
-          const detailRes = await axios.get(`${API_BASE}/apis/${api._id}`);
+          const detailRes = await apiClient.get(`/apis/${api._id}`);
           logsCache[api._id] = detailRes.data.logs;
         } catch (e) {
           console.error(`Error loading logs for api: ${api.name}`);
@@ -292,30 +307,30 @@ export const useStore = create<IState>((set, get) => ({
   },
 
   addApi: async (data) => {
-    const res = await axios.post(`${API_BASE}/apis`, data);
+    const res = await apiClient.post('/apis', data);
     set({ apis: [res.data, ...get().apis] });
     get().fetchAnalytics();
   },
 
   deleteApi: async (id) => {
-    await axios.delete(`${API_BASE}/apis/${id}`);
+    await apiClient.delete(`/apis/${id}`);
     set({ apis: get().apis.filter(a => a._id !== id) });
     get().fetchAnalytics();
   },
 
   testApi: async (id) => {
-    const res = await axios.post(`${API_BASE}/apis/${id}/test`);
+    const res = await apiClient.post(`/apis/${id}/test`);
     return res.data.result;
   },
 
   replayRequest: async (id) => {
-    const res = await axios.post(`${API_BASE}/apis/${id}/replay`);
+    const res = await apiClient.post(`/apis/${id}/replay`);
     return res.data;
   },
 
   fetchIncidents: async () => {
     try {
-      const res = await axios.get(`${API_BASE}/incidents`);
+      const res = await apiClient.get('/incidents');
       set({ incidents: res.data });
     } catch (e) {
       console.error('Error loading incidents timeline:', e);
@@ -323,20 +338,20 @@ export const useStore = create<IState>((set, get) => ({
   },
 
   resolveIncident: async (id) => {
-    await axios.post(`${API_BASE}/incidents/${id}/resolve`);
+    await apiClient.post(`/incidents/${id}/resolve`);
     get().fetchIncidents();
     get().fetchAnalytics();
   },
 
   executeAutoHeal: async (id) => {
-    await axios.post(`${API_BASE}/incidents/${id}/auto-heal`);
+    await apiClient.post(`/incidents/${id}/auto-heal`);
     await get().fetchIncidents();
     await get().fetchApis();
     await get().fetchAnalytics();
   },
 
   summarizeLog: async (logText) => {
-    const res = await axios.post(`${API_BASE}/ai/summarize-log`, { logText });
+    const res = await apiClient.post('/ai/summarize-log', { logText });
     return res.data;
   },
 
@@ -344,7 +359,7 @@ export const useStore = create<IState>((set, get) => ({
   setWarRoomActive: (val) => set({ isWarRoomActive: val }),
 
   injectChaos: async (params) => {
-    const res = await axios.post(`${API_BASE}/chaos/inject`, params);
+    const res = await apiClient.post('/chaos/inject', params);
     set({ activeChaos: res.data.activeChaos, isWarRoomActive: true });
     get().fetchApis();
     get().fetchIncidents();
@@ -352,7 +367,7 @@ export const useStore = create<IState>((set, get) => ({
   },
 
   abortChaos: async () => {
-    await axios.post(`${API_BASE}/chaos/abort`);
+    await apiClient.post('/chaos/abort');
     set({ activeChaos: null, isWarRoomActive: false });
     get().fetchApis();
     get().fetchIncidents();
@@ -361,7 +376,7 @@ export const useStore = create<IState>((set, get) => ({
 
   fetchChaosStatus: async () => {
     try {
-      const res = await axios.get(`${API_BASE}/chaos/status`);
+      const res = await apiClient.get('/chaos/status');
       set({ activeChaos: res.data.activeChaos });
       if (res.data.activeChaos) {
         set({ isWarRoomActive: true });
@@ -373,7 +388,7 @@ export const useStore = create<IState>((set, get) => ({
 
   analyzeArchitecture: async (diagramText) => {
     try {
-      const res = await axios.post(`${API_BASE}/ai/analyze-architecture`, { diagramText });
+      const res = await apiClient.post('/ai/analyze-architecture', { diagramText });
       return res.data;
     } catch (e: any) {
       console.error("Architecture audit failed, using fallback client UI data:", e);
@@ -397,7 +412,7 @@ export const useStore = create<IState>((set, get) => ({
 
   predictDigitalTwin: async (params) => {
     try {
-      const res = await axios.post(`${API_BASE}/ai/digital-twin-predict`, params);
+      const res = await apiClient.post('/ai/digital-twin-predict', params);
       return res.data;
     } catch (e: any) {
       console.error("Digital Twin forecasting failed, using fallback:", e);
@@ -423,7 +438,7 @@ export const useStore = create<IState>((set, get) => ({
 
   generatePostMortem: async (incidentTitle) => {
     try {
-      const res = await axios.post(`${API_BASE}/ai/generate-postmortem`, { title: incidentTitle });
+      const res = await apiClient.post('/ai/generate-postmortem', { title: incidentTitle });
       return res.data;
     } catch (e: any) {
       console.error("Postmortem compilation failed, using fallback:", e);
@@ -453,9 +468,9 @@ export const useStore = create<IState>((set, get) => ({
 
   fetchAnalytics: async () => {
     try {
-      const overviewRes = await axios.get(`${API_BASE}/analytics/overview`);
-      const heatmapRes = await axios.get(`${API_BASE}/analytics/heatmap`);
-      const predictRes = await axios.get(`${API_BASE}/analytics/predictive`);
+      const overviewRes = await apiClient.get('/analytics/overview');
+      const heatmapRes = await apiClient.get('/analytics/heatmap');
+      const predictRes = await apiClient.get('/analytics/predictive');
 
       set({
         metrics: overviewRes.data.metrics,
@@ -470,7 +485,7 @@ export const useStore = create<IState>((set, get) => ({
 
   fetchReports: async () => {
     try {
-      const res = await axios.get(`${API_BASE}/ai/reports`);
+      const res = await apiClient.get('/ai/reports');
       set({ reports: res.data });
     } catch (e) {
       console.error('Error loading AI reports:', e);
@@ -478,7 +493,7 @@ export const useStore = create<IState>((set, get) => ({
   },
 
   generateReport: async () => {
-    await axios.post(`${API_BASE}/ai/weekly-report`);
+    await apiClient.post('/ai/weekly-report');
     get().fetchReports();
     get().fetchAnalytics();
   },
