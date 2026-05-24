@@ -23,6 +23,22 @@ const isMock = () => process.env.MOCK_DB === 'true';
 // Helper to generate IDs
 const newId = () => new mongoose.Types.ObjectId().toString();
 
+const matchesQuery = (item: any, query: any): boolean => {
+  if (!query || typeof query !== 'object') return true;
+  const reserved = ['limit', 'sort', 'populate'];
+  return Object.entries(query).every(([key, value]): boolean => {
+    if (reserved.includes(key) || value === undefined || value === null) return true;
+    const itemValue = item[key];
+    if (Array.isArray(value)) {
+      return value.some((v: any) => v?.toString() === itemValue?.toString());
+    }
+    if (typeof value === 'object' && value !== null) {
+      return matchesQuery(itemValue, value);
+    }
+    return itemValue?.toString() === value?.toString();
+  });
+};
+
 export const seedMockData = async () => {
   console.log('🌱 Pre-populating seed data for immediate demonstration...');
 
@@ -301,7 +317,7 @@ export const db = {
     find: async () => isMock() ? users : UserModel.find(),
     findOne: async (query: any) => {
       if (isMock()) {
-        return users.find(u => u.email === query.email || u._id === query._id) || null;
+        return users.find(u => matchesQuery(u, query)) || null;
       }
       return UserModel.findOne(query);
     },
@@ -319,7 +335,7 @@ export const db = {
     find: async (query: any = {}) => {
       if (isMock()) {
         let list = [...apis];
-        if (query.project) list = list.filter(a => a.project === query.project);
+        list = list.filter(item => matchesQuery(item, query));
         return list;
       }
       return APIModel.find(query);
@@ -364,16 +380,10 @@ export const db = {
   logs: {
     find: async (query: any = {}) => {
       if (isMock()) {
-        let list = [...logs];
-        if (query.apiId) {
-          list = list.filter(l => l.apiId.toString() === query.apiId.toString());
-        }
-        // sort by timestamp descending
+        const limit = query.limit;
+        const list = logs.filter(item => matchesQuery(item, query));
         list.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-        if (query.limit) {
-          list = list.slice(0, query.limit);
-        }
-        return list;
+        return typeof limit === 'number' ? list.slice(0, limit) : list;
       }
       const mQuery = { ...query };
       delete mQuery.limit;
@@ -398,8 +408,7 @@ export const db = {
   incidents: {
     find: async (query: any = {}) => {
       if (isMock()) {
-        let list = [...incidents];
-        if (query.status) list = list.filter(i => i.status === query.status);
+        const list = incidents.filter(item => matchesQuery(item, query));
         list.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
         return list;
       }
@@ -433,8 +442,7 @@ export const db = {
   alerts: {
     find: async (query: any = {}) => {
       if (isMock()) {
-        let list = [...alerts];
-        if (query.resolved !== undefined) list = list.filter(a => a.resolved === query.resolved);
+        const list = alerts.filter(item => matchesQuery(item, query));
         list.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         return list;
       }

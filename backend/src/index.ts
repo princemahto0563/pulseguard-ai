@@ -105,7 +105,7 @@ const startServer = async () => {
   // 4. Listen on PORT
   server.listen(PORT, () => {
     console.log(`\n🛡️  ==========================================`);
-    console.log(`📡 PulseGuard Backend active on :https://pulseguard-ai-1.onrender.com${PORT}`);
+    console.log(`📡 PulseGuard Backend listening on port ${PORT}`);
     console.log(`🚀 Real-time WebSocket connection channels enabled`);
     console.log(`🛡️  ==========================================\n`);
   });

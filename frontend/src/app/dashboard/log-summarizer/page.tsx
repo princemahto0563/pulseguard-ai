@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useStore } from "@/store/useStore";
 import { 
-  Terminal, Bot, UploadCloud, FileText, CheckCircle2, ShieldAlert, Cpu, Sparkles 
+  Terminal, Bot, UploadCloud, FileText, CheckCircle2, ShieldAlert, Cpu, Sparkles, RefreshCw 
 } from "lucide-react";
 
 export default function LogSummarizer() {

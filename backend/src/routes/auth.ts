@@ -5,7 +5,18 @@ import { db } from '../services/dbService';
 import { authenticateToken, IAuthRequest } from '../middleware/auth';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-pulseguard-token-key-12345';
+
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET must be defined in production environment variables.');
+    }
+    console.warn('⚠️ JWT_SECRET is not configured. Using a local development fallback secret.');
+    return 'dev-super-secret-pulseguard-token-key-12345';
+  }
+  return secret;
+};
 
 // POST /api/auth/signup
 router.post('/signup', async (req: any, res: Response) => {
@@ -28,7 +39,7 @@ router.post('/signup', async (req: any, res: Response) => {
       role: 'admin'
     });
 
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id, role: user.role }, getJwtSecret(), { expiresIn: '7d' });
     
     return res.status(201).json({
       token,
@@ -57,7 +68,7 @@ router.post('/login', async (req: any, res: Response) => {
       return res.status(400).json({ error: 'Invalid email or password.' });
     }
 
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id, role: user.role }, getJwtSecret(), { expiresIn: '7d' });
     
     return res.status(200).json({
       token,

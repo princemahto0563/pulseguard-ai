@@ -8,6 +8,19 @@ export interface IAuthRequest extends Request {
   };
 }
 
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('🚨 JWT_SECRET is required in production and was not provided.');
+      throw new Error('JWT_SECRET must be defined in production environment variables.');
+    }
+    console.warn('⚠️ JWT_SECRET is not configured. Using a local development fallback secret.');
+    return 'dev-super-secret-pulseguard-token-key-12345';
+  }
+  return secret;
+};
+
 export const authenticateToken = (req: IAuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -17,7 +30,7 @@ export const authenticateToken = (req: IAuthRequest, res: Response, next: NextFu
   }
 
   try {
-    const secret = process.env.JWT_SECRET || 'super-secret-pulseguard-token-key-12345';
+    const secret = getJwtSecret();
     const decoded = jwt.verify(token, secret) as { id: string; role: string };
     req.user = decoded;
     next();
