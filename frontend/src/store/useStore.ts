@@ -196,6 +196,19 @@ export const useStore = create<IState>((set, get) => ({
       } else if (wsUrl.endsWith('/api/')) {
         wsUrl = wsUrl.slice(0, -5);
       }
+
+      // Extreme SRE Defense: If running in production (vercel domain) but wsUrl contains localhost,
+      // automatically override it to point to the secure live Render WS server node!
+      if (typeof window !== 'undefined') {
+        const currentHost = window.location.hostname;
+        const isLocalClient = currentHost === 'localhost' || currentHost === '127.0.0.1';
+        const isLocalWs = wsUrl.includes('localhost') || wsUrl.includes('127.0.0.1') || wsUrl.includes(':5001') || wsUrl.includes(':5000');
+        
+        if (!isLocalClient && isLocalWs) {
+          console.warn('⚠️  SRE Alert: Localhost WS target detected on production host. Automatically overriding WS URL to secure Render cloud node.');
+          wsUrl = 'https://pulseguard-ai-1.onrender.com';
+        }
+      }
       
       // Deduplicate WebSocket connections
       if (!socket) {

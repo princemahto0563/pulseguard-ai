@@ -8,6 +8,19 @@ if (API_URL && !API_URL.endsWith('/api') && !API_URL.endsWith('/api/')) {
   API_URL = `${cleanUrl}/api`;
 }
 
+// Extreme SRE Defense: If running in production (vercel domain) but API_URL contains localhost,
+// automatically override it to point to the production Render backend to guarantee zero-friction access!
+if (typeof window !== 'undefined') {
+  const currentHost = window.location.hostname;
+  const isLocalClient = currentHost === 'localhost' || currentHost === '127.0.0.1';
+  const isLocalApi = API_URL.includes('localhost') || API_URL.includes('127.0.0.1') || API_URL.includes(':5001') || API_URL.includes(':5000');
+  
+  if (!isLocalClient && isLocalApi) {
+    console.warn('⚠️  SRE Alert: Localhost API target detected on production host. Automatically overriding base URL to secure Render cloud node.');
+    API_URL = 'https://pulseguard-ai-1.onrender.com/api';
+  }
+}
+
 console.log('📡 PulseGuard API Client initialized with Base URL:', API_URL);
 
 const apiClient = axios.create({
