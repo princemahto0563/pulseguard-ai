@@ -87,7 +87,7 @@ export default function SRECommandConsole() {
 
           try {
             const token = localStorage.getItem("pg_token");
-            const res = await axios.post("http://localhost:5001/api/ai/chat", {
+            const res = await axios.post("http://:5001/api/ai/chat", {
               message: `Why is service ${matchedApi.name} registering healthScore ${matchedApi.healthScore}%? Provide diagnostic review.`
             }, {
               headers: { Authorization: `Bearer ${token}` }
@@ -111,7 +111,7 @@ export default function SRECommandConsole() {
           try {
             const token = localStorage.getItem("pg_token");
             // Call prediction endpoint or forecast telemetry
-            const response = await axios.post("http://localhost:5001/api/ai/digital-twin-predict", {
+            const response = await axios.post("https://pulseguard-ai-1.onrender.com/api/ai/digital-twin-predict", {
               trafficMultiplier: 2.5,
               podCount: 2,
               cachePolicy: "disabled"

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
 
-const API_BASE = 'http://localhost:5001/api';
+const API_BASE = 'https://pulseguard-ai-1.onrender.com';
 
 export interface IUser {
   id: string;
@@ -163,7 +163,7 @@ export const useStore = create<IState>((set, get) => ({
       setAuthHeader(token);
       set({ token, user, isAuthenticated: true });
       
-      socket = io('http://localhost:5001');
+      socket = io('https://pulseguard-ai-1.onrender.com');
       
       socket.on('connect', () => {
         console.log('🔌 Client WS linked.');

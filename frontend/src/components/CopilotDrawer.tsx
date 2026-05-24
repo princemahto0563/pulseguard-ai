@@ -29,7 +29,7 @@ export default function CopilotDrawer() {
     try {
       const token = localStorage.getItem("pg_token");
       const res = await axios.post(
-        "http://localhost:5001/api/ai/chat",
+        "https://pulseguard-ai-1.onrender.com/api/ai/chat",
         { message: userText },
         { headers: { Authorization: `Bearer ${token}` } }
       );
