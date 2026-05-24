@@ -73,7 +73,6 @@ export default function DashboardLayout({
       icon: Flame,
       action: async () => {
         await abortChaos();
-        alert("Active disaster simulations terminated successfully!");
       }
     },
     {
@@ -82,7 +81,6 @@ export default function DashboardLayout({
       icon: Bell,
       action: async () => {
         await generateReport();
-        alert("AI weekly compliance report compiled successfully!");
       }
     },
     {

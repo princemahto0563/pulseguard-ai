@@ -65,6 +65,13 @@ export interface IChaosState {
   startedAt: string;
 }
 
+export interface IToast {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  message: string;
+  duration?: number;
+}
+
 interface IState {
   token: string | null;
   user: IUser | null;
@@ -88,6 +95,7 @@ interface IState {
   // SCI-FI UPGRADE STATES
   isWarRoomActive: boolean;
   activeChaos: IChaosState | null;
+  toasts: IToast[];
   
   // Actions
   init: () => void;
@@ -122,6 +130,8 @@ interface IState {
   
   toggleVoiceAlerts: () => void;
   speakText: (text: string) => void;
+  addToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info', duration?: number) => void;
+  removeToast: (id: string) => void;
 }
 
 let socket: Socket | null = null;
@@ -144,6 +154,20 @@ export const useStore = create<IState>((set, get) => ({
   // SCI-FI INITIAL STATES
   isWarRoomActive: false,
   activeChaos: null,
+  toasts: [],
+
+  addToast: (message, type = 'info', duration = 4000) => {
+    const id = Math.random().toString();
+    const newToast: IToast = { id, type, message, duration };
+    set({ toasts: [...get().toasts, newToast] });
+    setTimeout(() => {
+      get().removeToast(id);
+    }, duration);
+  },
+
+  removeToast: (id) => {
+    set({ toasts: get().toasts.filter(t => t.id !== id) });
+  },
 
   init: () => {
     if (typeof window === 'undefined') return;
@@ -262,25 +286,37 @@ export const useStore = create<IState>((set, get) => ({
   },
 
   login: async (credentials) => {
-    const res = await apiClient.post('/auth/login', credentials);
-    const { token, user } = res.data;
-    
-    localStorage.setItem('pg_token', token);
-    localStorage.setItem('pg_user', JSON.stringify(user));
-    
-    set({ token, user, isAuthenticated: true });
-    get().init();
+    try {
+      const res = await apiClient.post('/auth/login', credentials);
+      const { token, user } = res.data;
+      
+      localStorage.setItem('pg_token', token);
+      localStorage.setItem('pg_user', JSON.stringify(user));
+      
+      set({ token, user, isAuthenticated: true });
+      get().init();
+      get().addToast(`Welcome back, ${user.name}!`, 'success');
+    } catch (e: any) {
+      get().addToast(e.response?.data?.error || 'Authentication failed. Please verify SRE credentials.', 'error');
+      throw e;
+    }
   },
 
   signup: async (userData) => {
-    const res = await apiClient.post('/auth/signup', userData);
-    const { token, user } = res.data;
-    
-    localStorage.setItem('pg_token', token);
-    localStorage.setItem('pg_user', JSON.stringify(user));
-    
-    set({ token, user, isAuthenticated: true });
-    get().init();
+    try {
+      const res = await apiClient.post('/auth/signup', userData);
+      const { token, user } = res.data;
+      
+      localStorage.setItem('pg_token', token);
+      localStorage.setItem('pg_user', JSON.stringify(user));
+      
+      set({ token, user, isAuthenticated: true });
+      get().init();
+      get().addToast('Secure SRE account registered successfully.', 'success');
+    } catch (e: any) {
+      get().addToast(e.response?.data?.error || 'Registration failed.', 'error');
+      throw e;
+    }
   },
 
   logout: () => {
@@ -291,6 +327,7 @@ export const useStore = create<IState>((set, get) => ({
       socket = null;
     }
     set({ token: null, user: null, isAuthenticated: false, apis: [], incidents: [], alerts: [], isWarRoomActive: false, activeChaos: null });
+    get().addToast('SRE session closed securely.', 'info');
   },
 
   fetchApis: async () => {
