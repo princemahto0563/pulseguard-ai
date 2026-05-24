@@ -1,6 +1,14 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pulseguard-ai-1.onrender.com/api';
+let API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://pulseguard-ai-1.onrender.com/api';
+
+// Defensive Programming: Automatically append '/api' if not present in the URL
+if (API_URL && !API_URL.endsWith('/api') && !API_URL.endsWith('/api/')) {
+  const cleanUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+  API_URL = `${cleanUrl}/api`;
+}
+
+console.log('📡 PulseGuard API Client initialized with Base URL:', API_URL);
 
 const apiClient = axios.create({
   baseURL: API_URL,

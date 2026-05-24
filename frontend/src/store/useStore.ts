@@ -164,7 +164,14 @@ export const useStore = create<IState>((set, get) => ({
       const user = JSON.parse(userStr);
       set({ token, user, isAuthenticated: true });
       
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'https://pulseguard-ai-1.onrender.com';
+      let wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'https://pulseguard-ai-1.onrender.com';
+      
+      // Defensive Programming: WebSocket URL should NOT end with /api or /api/
+      if (wsUrl.endsWith('/api')) {
+        wsUrl = wsUrl.slice(0, -4);
+      } else if (wsUrl.endsWith('/api/')) {
+        wsUrl = wsUrl.slice(0, -5);
+      }
       
       // Deduplicate WebSocket connections
       if (!socket) {
